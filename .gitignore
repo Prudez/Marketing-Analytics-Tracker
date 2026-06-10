@@ -3,5 +3,7 @@ backend/node_modules/
 frontend/node_modules/
 backend/.env
 backend/analytics.db
+backend/analytics.db-shm
+backend/analytics.db-wal
 dist/
 .env
