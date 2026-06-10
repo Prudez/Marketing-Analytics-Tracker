@@ -1,0 +1,14 @@
+import axios from 'axios';
+
+const api = axios.create({ baseURL: '/api' });
+
+export const getProperties = () => api.get('/properties').then(r => r.data.data);
+export const createProperty = (data) => api.post('/properties', data).then(r => r.data.data);
+export const deleteProperty = (id) => api.delete(`/properties/${id}`);
+export const addLink = (propertyId, data) => api.post(`/properties/${propertyId}/links`, data).then(r => r.data.data);
+export const deleteLink = (propertyId, linkId) => api.delete(`/properties/${propertyId}/links/${linkId}`);
+export const saveBuyrentStats = (propertyId, data) => api.post(`/properties/${propertyId}/buyrent-stats`, data);
+export const getPropertyAnalytics = (id) => api.get(`/analytics/property/${id}`).then(r => r.data.data);
+export const getOverview = () => api.get('/analytics/overview').then(r => r.data.data);
+export const getPlatformStatus = () => api.get('/platforms/status').then(r => r.data.data);
+export const refreshAll = () => api.post('/analytics/refresh-all').then(r => r.data);
