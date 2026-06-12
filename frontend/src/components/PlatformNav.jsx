@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export const PLATFORMS = {
+const PLATFORMS = {
   facebook:  { name: 'Facebook',  color: '#1877F2', icon: '📘' },
   instagram: { name: 'Instagram', color: '#E1306C', icon: '📸' },
   tiktok:    { name: 'TikTok',    color: '#69C9D0', icon: '🎵' },
@@ -21,7 +21,7 @@ export default function PlatformNav({ activePlatform }) {
           style={{ '--tab-color': cfg.color }}
           onClick={() => navigate(`/platforms/${key}`)}
         >
-          <span>{cfg.icon}</span>
+          <span className="platform-tab-icon">{cfg.icon}</span>
           <span>{cfg.name}</span>
         </button>
       ))}

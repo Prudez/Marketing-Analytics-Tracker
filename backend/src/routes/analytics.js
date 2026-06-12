@@ -244,7 +244,11 @@ router.get('/platform/:platform', async (req, res) => {
         .prepare('SELECT recorded_at, impressions, likes, comments, shares, clicks, reach FROM analytics_history WHERE property_id = ? AND platform = ? ORDER BY recorded_at ASC')
         .all(property.id, platform);
 
-      result.push({ property: { id: property.id, name: property.name, address: property.address }, latest, history });
+      result.push({
+        property: { id: property.id, name: property.name, address: property.address },
+        latest,
+        history,
+      });
     }
 
     const totals = { impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0, reach: 0 };
@@ -257,7 +261,7 @@ router.get('/platform/:platform', async (req, res) => {
       totals.reach += item.latest.reach || 0;
     }
 
-    // Aggregate history across all properties by recorded_at bucket (date only)
+    // Aggregate history across all properties by date bucket
     const bucketMap = {};
     for (const item of result) {
       for (const h of item.history) {
@@ -290,7 +294,16 @@ router.get('/platform/:platform/history', async (req, res) => {
   try {
     const db = await getDb();
     const rows = db
-      .prepare('SELECT recorded_at, SUM(impressions) as impressions, SUM(likes) as likes, SUM(comments) as comments, SUM(shares) as shares, SUM(clicks) as clicks, SUM(reach) as reach FROM analytics_history WHERE platform = ? GROUP BY substr(recorded_at, 1, 10) ORDER BY recorded_at ASC')
+      .prepare(`
+        SELECT substr(recorded_at, 1, 10) as recorded_at,
+          SUM(impressions) as impressions, SUM(likes) as likes,
+          SUM(comments) as comments, SUM(shares) as shares,
+          SUM(clicks) as clicks, SUM(reach) as reach
+        FROM analytics_history
+        WHERE platform = ?
+        GROUP BY substr(recorded_at, 1, 10)
+        ORDER BY recorded_at ASC
+      `)
       .all(platform);
     res.json({ success: true, data: rows });
   } catch (err) {
