@@ -1,8 +1,5 @@
 /**
- * Buyrent (buyrent.co.za) Service
- *
- * Buyrent does not provide a public API. This service uses manually-entered
- * stats (views, enquiries) stored in the local database.
+ * Buyrent (buyrent.co.za) — manual stats only (no public API).
  */
 
 const { getDb } = require('../db');
@@ -10,7 +7,7 @@ const { getDb } = require('../db');
 async function fetchPostAnalytics(propertyId) {
   try {
     const db = await getDb();
-    const row = db
+    const row = await db
       .prepare('SELECT views, enquiries, updated_at FROM buyrent_manual_stats WHERE property_id = ? ORDER BY updated_at DESC LIMIT 1')
       .get(propertyId);
 
@@ -46,12 +43,12 @@ async function fetchPostAnalytics(propertyId) {
 
 async function saveManualStats(propertyId, views, enquiries) {
   const db = await getDb();
-  const existing = db.prepare('SELECT id FROM buyrent_manual_stats WHERE property_id = ?').get(propertyId);
+  const existing = await db.prepare('SELECT id FROM buyrent_manual_stats WHERE property_id = ?').get(propertyId);
   if (existing) {
-    db.prepare(`UPDATE buyrent_manual_stats SET views = ?, enquiries = ?, updated_at = datetime('now') WHERE property_id = ?`)
+    await db.prepare(`UPDATE buyrent_manual_stats SET views = ?, enquiries = ?, updated_at = datetime('now') WHERE property_id = ?`)
       .run(views, enquiries, propertyId);
   } else {
-    db.prepare('INSERT INTO buyrent_manual_stats (property_id, views, enquiries) VALUES (?, ?, ?)')
+    await db.prepare('INSERT INTO buyrent_manual_stats (property_id, views, enquiries) VALUES (?, ?, ?)')
       .run(propertyId, views, enquiries);
   }
 }

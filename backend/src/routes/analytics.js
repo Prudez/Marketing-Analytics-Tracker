@@ -16,12 +16,12 @@ function isCacheStale(fetchedAt) {
 }
 
 async function saveCache(db, propertyId, platform, data) {
-  const existing = db
+  const existing = await db
     .prepare('SELECT id FROM analytics_cache WHERE property_id = ? AND platform = ?')
     .get(propertyId, platform);
 
   if (existing) {
-    db.prepare(`
+    await db.prepare(`
       UPDATE analytics_cache
       SET fetched_at = datetime('now'), impressions = ?, likes = ?, comments = ?,
           shares = ?, clicks = ?, reach = ?, extra_json = ?
@@ -32,7 +32,7 @@ async function saveCache(db, propertyId, platform, data) {
       JSON.stringify(data), propertyId, platform
     );
   } else {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO analytics_cache
         (property_id, platform, impressions, likes, comments, shares, clicks, reach, extra_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -44,8 +44,7 @@ async function saveCache(db, propertyId, platform, data) {
     );
   }
 
-  // Insert a history snapshot every time fresh data is saved
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO analytics_history
       (property_id, platform, impressions, likes, comments, shares, clicks, reach)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -60,7 +59,7 @@ async function fetchForLink(db, link) {
   const service = services[link.platform];
   if (!service) return { error: true, message: `Unknown platform: ${link.platform}`, data: null };
 
-  const cacheRow = db
+  const cacheRow = await db
     .prepare('SELECT * FROM analytics_cache WHERE property_id = ? AND platform = ?')
     .get(link.property_id, link.platform);
 
@@ -100,10 +99,10 @@ router.get('/property/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const db = await getDb();
-    const property = db.prepare('SELECT * FROM properties WHERE id = ?').get(id);
+    const property = await db.prepare('SELECT * FROM properties WHERE id = ?').get(id);
     if (!property) return res.status(404).json({ success: false, error: 'Property not found' });
 
-    const links = db.prepare('SELECT * FROM platform_links WHERE property_id = ?').all(id);
+    const links = await db.prepare('SELECT * FROM platform_links WHERE property_id = ?').all(id);
     const byPlatform = {};
     for (const link of links) {
       if (!byPlatform[link.platform]) {
@@ -139,12 +138,12 @@ router.get('/property/:id', async (req, res) => {
 router.get('/overview', async (req, res) => {
   try {
     const db = await getDb();
-    const properties = db.prepare('SELECT * FROM properties').all();
+    const properties = await db.prepare('SELECT * FROM properties').all();
     const platformTotals = { facebook: {}, instagram: {}, tiktok: {}, twitter: {}, buyrent: {} };
     const propertyStats = [];
 
     for (const property of properties) {
-      const links = db.prepare('SELECT * FROM platform_links WHERE property_id = ?').all(property.id);
+      const links = await db.prepare('SELECT * FROM platform_links WHERE property_id = ?').all(property.id);
       const byPlatform = {};
 
       for (const link of links) {
@@ -189,7 +188,7 @@ router.get('/overview', async (req, res) => {
 router.post('/refresh-all', async (req, res) => {
   try {
     const db = await getDb();
-    const links = db.prepare('SELECT * FROM platform_links').all();
+    const links = await db.prepare('SELECT * FROM platform_links').all();
     const results = [];
     for (const link of links) {
       const service = services[link.platform];
@@ -215,11 +214,11 @@ router.get('/platform/:platform', async (req, res) => {
   }
   try {
     const db = await getDb();
-    const properties = db.prepare('SELECT * FROM properties').all();
+    const properties = await db.prepare('SELECT * FROM properties').all();
     const result = [];
 
     for (const property of properties) {
-      const link = db
+      const link = await db
         .prepare('SELECT * FROM platform_links WHERE property_id = ? AND platform = ?')
         .get(property.id, platform);
 
@@ -228,7 +227,7 @@ router.get('/platform/:platform', async (req, res) => {
         const fetched = await fetchForLink(db, link);
         if (fetched.data) latest = fetched.data;
       } else {
-        const cacheRow = db
+        const cacheRow = await db
           .prepare('SELECT * FROM analytics_cache WHERE property_id = ? AND platform = ?')
           .get(property.id, platform);
         if (cacheRow) {
@@ -240,7 +239,7 @@ router.get('/platform/:platform', async (req, res) => {
         }
       }
 
-      const history = db
+      const history = await db
         .prepare('SELECT recorded_at, impressions, likes, comments, shares, clicks, reach FROM analytics_history WHERE property_id = ? AND platform = ? ORDER BY recorded_at ASC')
         .all(property.id, platform);
 
@@ -261,7 +260,6 @@ router.get('/platform/:platform', async (req, res) => {
       totals.reach += item.latest.reach || 0;
     }
 
-    // Aggregate history across all properties by date bucket
     const bucketMap = {};
     for (const item of result) {
       for (const h of item.history) {
@@ -293,7 +291,7 @@ router.get('/platform/:platform/history', async (req, res) => {
   }
   try {
     const db = await getDb();
-    const rows = db
+    const rows = await db
       .prepare(`
         SELECT substr(recorded_at, 1, 10) as recorded_at,
           SUM(impressions) as impressions, SUM(likes) as likes,
