@@ -68,6 +68,21 @@ async function getDb() {
       FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
     )
   `);
+  sqlDb.run(`
+    CREATE TABLE IF NOT EXISTS analytics_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      property_id INTEGER NOT NULL,
+      platform TEXT NOT NULL,
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      impressions INTEGER DEFAULT 0,
+      likes INTEGER DEFAULT 0,
+      comments INTEGER DEFAULT 0,
+      shares INTEGER DEFAULT 0,
+      clicks INTEGER DEFAULT 0,
+      reach INTEGER DEFAULT 0,
+      FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    )
+  `);
   save();
 
   _db = {
