@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
-import { getProperties, deleteProperty, getPropertyAnalytics, deleteLink, addLink } from '../api';
+import { getProperties, deleteProperty, getPropertyAnalytics, deleteLink, addLink, saveManualPlatformStats } from '../api';
 
 const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0);
 
@@ -19,6 +19,11 @@ function PropertyModal({ property, onClose, onDeleted }) {
   const [addingLinks, setAddingLinks] = useState(false);
   const [linkError, setLinkError] = useState('');
   const [showAddLinks, setShowAddLinks] = useState(false);
+  const [showManualStats, setShowManualStats] = useState(false);
+  const [manualPlatform, setManualPlatform] = useState('facebook');
+  const [manualFields, setManualFields] = useState({ reach: 0, impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0 });
+  const [savingManual, setSavingManual] = useState(false);
+  const [manualSuccess, setManualSuccess] = useState(false);
 
   const reload = () => {
     setLoading(true);
@@ -48,6 +53,20 @@ function PropertyModal({ property, onClose, onDeleted }) {
       setLinkError(err.response?.data?.error || err.message || 'Failed to add links.');
     } finally {
       setAddingLinks(false);
+    }
+  };
+
+  const handleSaveManualStats = async () => {
+    setSavingManual(true);
+    try {
+      await saveManualPlatformStats(property.id, { platform: manualPlatform, ...manualFields });
+      setManualSuccess(true);
+      reload();
+      setTimeout(() => setManualSuccess(false), 2000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingManual(false);
     }
   };
 
@@ -154,6 +173,50 @@ function PropertyModal({ property, onClose, onDeleted }) {
               ))
             ) : (
               <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 0' }}>No platforms linked yet. Click "+ Add Links" above.</div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 12 }}>
+              <div className="section-title" style={{ margin: 0 }}>Enter Stats Manually</div>
+              <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => setShowManualStats(v => !v)}>
+                {showManualStats ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            {showManualStats && (
+              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                <div className="form-group" style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 12, display: 'block', marginBottom: 4, color: 'var(--muted)' }}>Platform</label>
+                  <select
+                    value={manualPlatform}
+                    onChange={e => setManualPlatform(e.target.value)}
+                    style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'inherit', borderRadius: 6, padding: '6px 10px', fontSize: 13 }}
+                  >
+                    {PLATFORMS.map(({ key, label }) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  {['reach', 'impressions', 'likes', 'comments', 'shares', 'clicks'].map(field => (
+                    <div className="form-group" key={field}>
+                      <label style={{ fontSize: 12, display: 'block', marginBottom: 4, color: 'var(--muted)', textTransform: 'capitalize' }}>{field}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={manualFields[field]}
+                        onChange={e => setManualFields(f => ({ ...f, [field]: parseInt(e.target.value, 10) || 0 }))}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button className="btn btn-primary" onClick={handleSaveManualStats} disabled={savingManual}>
+                    {savingManual ? 'Saving…' : 'Save Stats'}
+                  </button>
+                  {manualSuccess && <span style={{ color: 'var(--accent)', fontSize: 13 }}>Stats saved!</span>}
+                </div>
+              </div>
             )}
           </>
         )}

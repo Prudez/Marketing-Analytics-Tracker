@@ -117,6 +117,47 @@ router.delete('/:id/links/:linkId', async (req, res) => {
   }
 });
 
+router.post('/:id/manual-stats', async (req, res) => {
+  const validPlatforms = ['facebook', 'instagram', 'tiktok', 'twitter', 'buyrent'];
+  const { platform, impressions, likes, comments, shares, clicks, reach } = req.body;
+  if (!platform || !validPlatforms.includes(platform))
+    return res.status(400).json({ success: false, error: `platform must be one of: ${validPlatforms.join(', ')}` });
+  const propertyId = parseInt(req.params.id, 10);
+  try {
+    const db = await getDb();
+    const property = db.prepare('SELECT id FROM properties WHERE id = ?').get(propertyId);
+    if (!property) return res.status(404).json({ success: false, error: 'Property not found' });
+    const now = new Date().toISOString();
+    const imp = impressions || 0;
+    const lk = likes || 0;
+    const cm = comments || 0;
+    const sh = shares || 0;
+    const cl = clicks || 0;
+    const rc = reach || 0;
+    // Upsert into analytics_cache (select-then-insert-or-update, no UNIQUE constraint)
+    const existing = db.prepare('SELECT id FROM analytics_cache WHERE property_id = ? AND platform = ?').get(propertyId, platform);
+    if (existing) {
+      db.prepare(`
+        UPDATE analytics_cache SET fetched_at=?, impressions=?, likes=?, comments=?, shares=?, clicks=?, reach=?
+        WHERE property_id=? AND platform=?
+      `).run(now, imp, lk, cm, sh, cl, rc, propertyId, platform);
+    } else {
+      db.prepare(`
+        INSERT INTO analytics_cache (property_id, platform, fetched_at, impressions, likes, comments, shares, clicks, reach)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(propertyId, platform, now, imp, lk, cm, sh, cl, rc);
+    }
+    // Insert into analytics_history for time-series charts
+    db.prepare(`
+      INSERT INTO analytics_history (property_id, platform, impressions, likes, comments, shares, clicks, reach, recorded_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(propertyId, platform, imp, lk, cm, sh, cl, rc, now);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/:id/buyrent-stats', async (req, res) => {
   const { views, enquiries } = req.body;
   const propertyId = parseInt(req.params.id, 10);

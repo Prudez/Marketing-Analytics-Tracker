@@ -15,3 +15,4 @@ export const getOverview = () => api.get('/analytics/overview').then(r => r.data
 export const getPlatformStatus = () => api.get('/platforms/status').then(r => r.data.data);
 export const refreshAll = () => api.post('/analytics/refresh-all').then(r => r.data);
 export const getPlatformAnalytics = (platform) => api.get(`/analytics/platform/${platform}`).then(r => r.data.data);
+export const saveManualPlatformStats = (propertyId, data) => api.post(`/properties/${propertyId}/manual-stats`, data).then(r => r.data);
