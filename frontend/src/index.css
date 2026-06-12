@@ -164,3 +164,85 @@ tr:hover td { background: var(--card2); }
 /* Empty state */
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
 .empty h3 { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+
+/* Sidebar section label */
+.sidebar-section-label {
+  padding: 16px 20px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+.sidebar-platform-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+/* Platform tabs nav */
+.platform-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.platform-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-left: 3px solid var(--tab-color, var(--border));
+  transition: all .15s;
+}
+.platform-tab:hover {
+  color: var(--text);
+  background: var(--card2);
+}
+.platform-tab.active {
+  color: var(--text);
+  background: var(--card2);
+  border-color: var(--tab-color, var(--accent));
+  border-left-color: var(--tab-color, var(--accent));
+}
+.platform-tab-icon {
+  font-size: 16px;
+}
+
+/* Platform page header */
+.platform-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border-left: 4px solid var(--accent);
+}
+.platform-header-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+.platform-header .page-title {
+  margin-bottom: 2px;
+}
+
+/* History chart card */
+.history-chart {
+  padding: 20px;
+}
+.history-chart .section-title {
+  margin-bottom: 18px;
+}
