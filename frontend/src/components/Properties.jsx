@@ -1,25 +1,73 @@
 import React, { useEffect, useState } from 'react';
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
-import { getProperties, deleteProperty, getPropertyAnalytics, deleteLink } from '../api';
+import { getProperties, deleteProperty, getPropertyAnalytics, deleteLink, addLink, saveManualPlatformStats } from '../api';
 
 const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0);
 
-const PLATFORM_COLORS = {
-  facebook: '#1877F2', instagram: '#E1306C', tiktok: '#69C9D0', twitter: '#1DA1F2', buyrent: '#FF6B00',
-};
+const PLATFORMS = [
+  { key: 'facebook',  label: 'Facebook',  placeholder: 'https://www.facebook.com/yourpage/posts/123' },
+  { key: 'instagram', label: 'Instagram', placeholder: 'https://www.instagram.com/p/ABC123/' },
+  { key: 'tiktok',    label: 'TikTok',    placeholder: 'https://www.tiktok.com/@user/video/123' },
+  { key: 'twitter',   label: 'Twitter/X', placeholder: 'https://twitter.com/user/status/123' },
+  { key: 'buyrent',   label: 'Buyrent',   placeholder: 'https://www.buyrent.co.za/listing/123' },
+];
 
 function PropertyModal({ property, onClose, onDeleted }) {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [newLinks, setNewLinks] = useState({ facebook: '', instagram: '', tiktok: '', twitter: '', buyrent: '' });
+  const [addingLinks, setAddingLinks] = useState(false);
+  const [linkError, setLinkError] = useState('');
+  const [showAddLinks, setShowAddLinks] = useState(false);
+  const [showManualStats, setShowManualStats] = useState(false);
+  const [manualPlatform, setManualPlatform] = useState('facebook');
+  const [manualFields, setManualFields] = useState({ reach: 0, impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0 });
+  const [savingManual, setSavingManual] = useState(false);
+  const [manualSuccess, setManualSuccess] = useState(false);
 
-  useEffect(() => {
+  const reload = () => {
+    setLoading(true);
     getPropertyAnalytics(property.id).then(setAnalytics).catch(console.error).finally(() => setLoading(false));
-  }, [property.id]);
+  };
+
+  useEffect(() => { reload(); }, [property.id]);
 
   const handleDeleteLink = async (linkId) => {
     await deleteLink(property.id, linkId);
-    const updated = await getPropertyAnalytics(property.id);
-    setAnalytics(updated);
+    reload();
+  };
+
+  const handleAddLinks = async () => {
+    const toAdd = PLATFORMS.filter(({ key }) => newLinks[key].trim());
+    if (toAdd.length === 0) { setLinkError('Enter at least one URL.'); return; }
+    setAddingLinks(true);
+    setLinkError('');
+    try {
+      for (const { key } of toAdd) {
+        await addLink(property.id, { platform: key, post_url: newLinks[key].trim() });
+      }
+      setNewLinks({ facebook: '', instagram: '', tiktok: '', twitter: '', buyrent: '' });
+      setShowAddLinks(false);
+      reload();
+    } catch (err) {
+      setLinkError(err.response?.data?.error || err.message || 'Failed to add links.');
+    } finally {
+      setAddingLinks(false);
+    }
+  };
+
+  const handleSaveManualStats = async () => {
+    setSavingManual(true);
+    try {
+      await saveManualPlatformStats(property.id, { platform: manualPlatform, ...manualFields });
+      setManualSuccess(true);
+      reload();
+      setTimeout(() => setManualSuccess(false), 2000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingManual(false);
+    }
   };
 
   const radarData = analytics
@@ -86,17 +134,89 @@ function PropertyModal({ property, onClose, onDeleted }) {
               </table>
             </div>
 
-            {property.links?.length > 0 && (
-              <>
-                <div className="section-title">Linked Posts</div>
-                {property.links.map(link => (
-                  <div key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                    <span className={`platform-badge ${link.platform}`}>{link.platform}</span>
-                    <a href={link.post_url} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 13, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.post_url || link.post_id}</a>
-                    <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleDeleteLink(link.id)}>Remove</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div className="section-title" style={{ margin: 0 }}>Linked Posts</div>
+              <button className="btn btn-primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => setShowAddLinks(v => !v)}>
+                {showAddLinks ? 'Cancel' : '+ Add Links'}
+              </button>
+            </div>
+
+            {showAddLinks && (
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                {PLATFORMS.map(({ key, label, placeholder }) => (
+                  <div className="form-group" key={key} style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>
+                      <span className={`platform-badge ${key}`} style={{ marginRight: 6 }}>{label}</span>
+                    </label>
+                    <input
+                      value={newLinks[key]}
+                      onChange={e => setNewLinks(l => ({ ...l, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      style={{ width: '100%' }}
+                    />
                   </div>
                 ))}
-              </>
+                {linkError && <div className="alert alert-error" style={{ marginBottom: 10 }}>{linkError}</div>}
+                <button className="btn btn-primary" onClick={handleAddLinks} disabled={addingLinks}>
+                  {addingLinks ? 'Saving…' : 'Save Links'}
+                </button>
+              </div>
+            )}
+
+            {property.links?.length > 0 ? (
+              property.links.map(link => (
+                <div key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                  <span className={`platform-badge ${link.platform}`}>{link.platform}</span>
+                  <a href={link.post_url} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 13, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.post_url || link.post_id}</a>
+                  <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleDeleteLink(link.id)}>Remove</button>
+                </div>
+              ))
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 0' }}>No platforms linked yet. Click "+ Add Links" above.</div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 12 }}>
+              <div className="section-title" style={{ margin: 0 }}>Enter Stats Manually</div>
+              <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => setShowManualStats(v => !v)}>
+                {showManualStats ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            {showManualStats && (
+              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                <div className="form-group" style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 12, display: 'block', marginBottom: 4, color: 'var(--muted)' }}>Platform</label>
+                  <select
+                    value={manualPlatform}
+                    onChange={e => setManualPlatform(e.target.value)}
+                    style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'inherit', borderRadius: 6, padding: '6px 10px', fontSize: 13 }}
+                  >
+                    {PLATFORMS.map(({ key, label }) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  {['reach', 'impressions', 'likes', 'comments', 'shares', 'clicks'].map(field => (
+                    <div className="form-group" key={field}>
+                      <label style={{ fontSize: 12, display: 'block', marginBottom: 4, color: 'var(--muted)', textTransform: 'capitalize' }}>{field}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={manualFields[field]}
+                        onChange={e => setManualFields(f => ({ ...f, [field]: parseInt(e.target.value, 10) || 0 }))}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button className="btn btn-primary" onClick={handleSaveManualStats} disabled={savingManual}>
+                    {savingManual ? 'Saving…' : 'Save Stats'}
+                  </button>
+                  {manualSuccess && <span style={{ color: 'var(--accent)', fontSize: 13 }}>Stats saved!</span>}
+                </div>
+              </div>
             )}
           </>
         )}

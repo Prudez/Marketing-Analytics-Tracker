@@ -29,6 +29,9 @@ export default function AddProperty() {
     setSaving(true);
     try {
       const property = await createProperty(form);
+      if (!property || !property.id) {
+        throw new Error('Server is waking up — please wait 30 seconds and try again.');
+      }
       const pid = property.id;
 
       for (const { key } of PLATFORMS) {

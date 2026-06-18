@@ -43,6 +43,17 @@ async function saveCache(db, propertyId, platform, data) {
       JSON.stringify(data)
     );
   }
+
+  // Insert a history snapshot every time fresh data is saved
+  db.prepare(`
+    INSERT INTO analytics_history
+      (property_id, platform, impressions, likes, comments, shares, clicks, reach)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    propertyId, platform,
+    data.impressions || 0, data.likes || 0, data.comments || 0,
+    data.shares || 0, data.clicks || 0, data.reach || 0
+  );
 }
 
 async function fetchForLink(db, link) {
@@ -191,6 +202,110 @@ router.post('/refresh-all', async (req, res) => {
       results.push({ linkId: link.id, platform: link.platform, error: result.error });
     }
     res.json({ success: true, data: results });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/platform/:platform', async (req, res) => {
+  const { platform } = req.params;
+  const validPlatforms = ['facebook', 'instagram', 'tiktok', 'twitter', 'buyrent'];
+  if (!validPlatforms.includes(platform)) {
+    return res.status(400).json({ success: false, error: 'Invalid platform' });
+  }
+  try {
+    const db = await getDb();
+    const properties = db.prepare('SELECT * FROM properties').all();
+    const result = [];
+
+    for (const property of properties) {
+      const link = db
+        .prepare('SELECT * FROM platform_links WHERE property_id = ? AND platform = ?')
+        .get(property.id, platform);
+
+      let latest = { impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0, reach: 0 };
+      if (link) {
+        const fetched = await fetchForLink(db, link);
+        if (fetched.data) latest = fetched.data;
+      } else {
+        const cacheRow = db
+          .prepare('SELECT * FROM analytics_cache WHERE property_id = ? AND platform = ?')
+          .get(property.id, platform);
+        if (cacheRow) {
+          latest = {
+            impressions: cacheRow.impressions, likes: cacheRow.likes,
+            comments: cacheRow.comments, shares: cacheRow.shares,
+            clicks: cacheRow.clicks, reach: cacheRow.reach,
+          };
+        }
+      }
+
+      const history = db
+        .prepare('SELECT recorded_at, impressions, likes, comments, shares, clicks, reach FROM analytics_history WHERE property_id = ? AND platform = ? ORDER BY recorded_at ASC')
+        .all(property.id, platform);
+
+      result.push({
+        property: { id: property.id, name: property.name, address: property.address },
+        latest,
+        history,
+      });
+    }
+
+    const totals = { impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0, reach: 0 };
+    for (const item of result) {
+      totals.impressions += item.latest.impressions || 0;
+      totals.likes += item.latest.likes || 0;
+      totals.comments += item.latest.comments || 0;
+      totals.shares += item.latest.shares || 0;
+      totals.clicks += item.latest.clicks || 0;
+      totals.reach += item.latest.reach || 0;
+    }
+
+    // Aggregate history across all properties by date bucket
+    const bucketMap = {};
+    for (const item of result) {
+      for (const h of item.history) {
+        const bucket = h.recorded_at.substring(0, 10);
+        if (!bucketMap[bucket]) {
+          bucketMap[bucket] = { recorded_at: bucket, impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0, reach: 0 };
+        }
+        bucketMap[bucket].impressions += h.impressions || 0;
+        bucketMap[bucket].likes += h.likes || 0;
+        bucketMap[bucket].comments += h.comments || 0;
+        bucketMap[bucket].shares += h.shares || 0;
+        bucketMap[bucket].clicks += h.clicks || 0;
+        bucketMap[bucket].reach += h.reach || 0;
+      }
+    }
+    const history = Object.values(bucketMap).sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
+
+    res.json({ success: true, data: { platform, properties: result, totals, history } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/platform/:platform/history', async (req, res) => {
+  const { platform } = req.params;
+  const validPlatforms = ['facebook', 'instagram', 'tiktok', 'twitter', 'buyrent'];
+  if (!validPlatforms.includes(platform)) {
+    return res.status(400).json({ success: false, error: 'Invalid platform' });
+  }
+  try {
+    const db = await getDb();
+    const rows = db
+      .prepare(`
+        SELECT substr(recorded_at, 1, 10) as recorded_at,
+          SUM(impressions) as impressions, SUM(likes) as likes,
+          SUM(comments) as comments, SUM(shares) as shares,
+          SUM(clicks) as clicks, SUM(reach) as reach
+        FROM analytics_history
+        WHERE platform = ?
+        GROUP BY substr(recorded_at, 1, 10)
+        ORDER BY recorded_at ASC
+      `)
+      .all(platform);
+    res.json({ success: true, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
