@@ -1,18 +1,15 @@
-/**
- * Buyrent (buyrent.co.za) Service
- *
- * Buyrent does not provide a public API. This service uses manually-entered
- * stats (views, enquiries) stored in the local database.
- */
-
-const { getDb } = require('../db');
+const { get, run } = require('../db');
 
 async function fetchPostAnalytics(propertyId) {
   try {
-    const db = await getDb();
-    const row = db
-      .prepare('SELECT views, enquiries, updated_at FROM buyrent_manual_stats WHERE property_id = ? ORDER BY updated_at DESC LIMIT 1')
-      .get(propertyId);
+    const row = await get(
+      `SELECT views, enquiries, updated_at
+         FROM propiq.buyrent_manual_stats
+        WHERE property_id = $1
+        ORDER BY updated_at DESC
+        LIMIT 1`,
+      [propertyId]
+    );
 
     if (!row) {
       return {
@@ -45,14 +42,22 @@ async function fetchPostAnalytics(propertyId) {
 }
 
 async function saveManualStats(propertyId, views, enquiries) {
-  const db = await getDb();
-  const existing = db.prepare('SELECT id FROM buyrent_manual_stats WHERE property_id = ?').get(propertyId);
+  const existing = await get(
+    'SELECT id FROM propiq.buyrent_manual_stats WHERE property_id = $1',
+    [propertyId]
+  );
   if (existing) {
-    db.prepare(`UPDATE buyrent_manual_stats SET views = ?, enquiries = ?, updated_at = datetime('now') WHERE property_id = ?`)
-      .run(views, enquiries, propertyId);
+    await run(
+      `UPDATE propiq.buyrent_manual_stats
+          SET views = $1, enquiries = $2, updated_at = now()
+        WHERE property_id = $3`,
+      [views, enquiries, propertyId]
+    );
   } else {
-    db.prepare('INSERT INTO buyrent_manual_stats (property_id, views, enquiries) VALUES (?, ?, ?)')
-      .run(propertyId, views, enquiries);
+    await run(
+      'INSERT INTO propiq.buyrent_manual_stats (property_id, views, enquiries) VALUES ($1, $2, $3)',
+      [propertyId, views, enquiries]
+    );
   }
 }
 
