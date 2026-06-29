@@ -246,3 +246,35 @@ tr:hover td { background: var(--card2); }
 .history-chart .section-title {
   margin-bottom: 18px;
 }
+/* App layout (new) */
+.app-layout { display: flex; min-height: 100vh; }
+.main-content { margin-left: 220px; flex: 1; padding: 32px; }
+
+/* Sidebar nav links */
+.sidebar-brand {
+  padding: 0 20px 24px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+.sidebar-nav { display: flex; flex-direction: column; }
+.nav-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; font-size: 14px; color: var(--muted);
+  transition: all .15s;
+}
+.nav-link:hover, .nav-link.active {
+  color: var(--text); background: var(--accent-glow);
+  border-right: 2px solid var(--accent);
+}
+.sidebar-section-title {
+  padding: 16px 20px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+}

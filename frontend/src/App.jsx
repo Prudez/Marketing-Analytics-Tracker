@@ -1,39 +1,81 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, NavLink } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import Properties from './components/Properties';
 import AddProperty from './components/AddProperty';
 import ConnectPlatforms from './components/ConnectPlatforms';
 import PlatformPage from './components/PlatformPage';
+import Login from './components/Login';
+import Register from './components/Register';
 
 const PLATFORM_NAV = [
-  { key: 'facebook',  label: 'Facebook',  color: '#1877F2', icon: '📘' },
-  { key: 'instagram', label: 'Instagram', color: '#E1306C', icon: '📸' },
-  { key: 'tiktok',    label: 'TikTok',    color: '#69C9D0', icon: '🎵' },
-  { key: 'twitter',   label: 'Twitter/X', color: '#1DA1F2', icon: '🐦' },
-  { key: 'buyrent',   label: 'Buyrent',   color: '#FF6B00', icon: '🏠' },
+  { key: 'facebook', label: 'Facebook', icon: '📘', color: '#1877F2' },
+  { key: 'instagram', label: 'Instagram', icon: '📸', color: '#E1306C' },
+  { key: 'tiktok', label: 'TikTok', icon: '🎵', color: '#69C9D0' },
+  { key: 'twitter', label: 'Twitter/X', icon: '🐦', color: '#1DA1F2' },
+  { key: 'buyrent', label: 'Buyrent', icon: '🏠', color: '#FF6B00' },
 ];
 
+function isLoggedIn() {
+  return !!localStorage.getItem('token');
+}
+
+function ProtectedRoute({ children }) {
+  return isLoggedIn() ? children : <Navigate to="/login" replace />;
+}
+
 function Sidebar() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
   return (
     <div className="sidebar">
-      <div className="sidebar-logo">
-        📊 MarketTracker
-        <span>Real Estate Analytics</span>
+      <div className="sidebar-brand">📊 MarketTracker<br />
+        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>Real Estate Analytics</span>
       </div>
-      <nav>
-        <NavLink to="/" end>🏠 Dashboard</NavLink>
-        <NavLink to="/properties">🏢 Properties</NavLink>
-        <NavLink to="/add">➕ Add Property</NavLink>
-        <NavLink to="/connect">🔌 Connect Platforms</NavLink>
-        <div className="sidebar-section-label">Platforms</div>
+      <nav className="sidebar-nav">
+        <NavLink to="/" end className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>🏠 Dashboard</NavLink>
+        <NavLink to="/properties" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>🏢 Properties</NavLink>
+        <NavLink to="/add" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>+ Add Property</NavLink>
+        <NavLink to="/connect" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>🔌 Connect Platforms</NavLink>
+      </nav>
+      <div className="sidebar-section-title">PLATFORMS</div>
+      <nav className="sidebar-nav">
         {PLATFORM_NAV.map(p => (
-          <NavLink key={p.key} to={`/platforms/${p.key}`}>
-            <span className="sidebar-platform-dot" style={{ background: p.color }} />
-            {p.icon} {p.label}
+          <NavLink key={p.key} to={`/platforms/${p.key}`} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+            <span style={{ color: p.color }}>{p.icon}</span> {p.label}
           </NavLink>
         ))}
       </nav>
+      <div style={{ marginTop: 'auto', padding: '16px 0', borderTop: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>👤 {user.name || user.email}</div>
+        <button className="btn btn-ghost" style={{ width: '100%', fontSize: 13 }} onClick={handleLogout}>Sign Out</button>
+      </div>
+    </div>
+  );
+}
+
+function Layout() {
+  return (
+    <div className="app-layout">
+      <Sidebar />
+      <main className="main-content">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/properties" element={<Properties />} />
+          <Route path="/add" element={<AddProperty />} />
+          <Route path="/connect" element={<ConnectPlatforms />} />
+          <Route path="/platforms/:platform" element={<PlatformPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
     </div>
   );
 }
@@ -41,19 +83,11 @@ function Sidebar() {
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="layout">
-        <Sidebar />
-        <main className="main">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/properties" element={<Properties />} />
-            <Route path="/add" element={<AddProperty />} />
-            <Route path="/connect" element={<ConnectPlatforms />} />
-            <Route path="/platforms" element={<Navigate to="/platforms/facebook" replace />} />
-            <Route path="/platforms/:platform" element={<PlatformPage />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/*" element={<ProtectedRoute><Layout /></ProtectedRoute>} />
+      </Routes>
     </BrowserRouter>
   );
 }

@@ -16,3 +16,5 @@ export const getPlatformStatus = () => api.get('/platforms/status').then(r => r.
 export const refreshAll = () => api.post('/analytics/refresh-all').then(r => r.data);
 export const getPlatformAnalytics = (platform) => api.get(`/analytics/platform/${platform}`).then(r => r.data.data);
 export const saveManualPlatformStats = (propertyId, data) => api.post(`/properties/${propertyId}/manual-stats`, data).then(r => r.data);
+export const login = (data) => api.post('/auth/login', data).then(r => r.data.data);
+export const register = (data) => api.post('/auth/register', data).then(r => r.data.data);

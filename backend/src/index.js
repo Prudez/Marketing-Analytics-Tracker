@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+const authRouter = require('./routes/auth');
 const propertiesRouter = require('./routes/properties');
 const analyticsRouter = require('./routes/analytics');
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 app.use('/api/properties', propertiesRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/auth', authRouter);
 app.get('/api/platforms/status', (req, res) => {
   res.json({
     success: true,

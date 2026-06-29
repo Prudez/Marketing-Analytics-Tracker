@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getDb } = require('../db');
+const { all, get, run } = require('../db');
 const facebook = require('../services/facebook');
 const instagram = require('../services/instagram');
 const tiktok = require('../services/tiktok');
@@ -15,54 +15,46 @@ function isCacheStale(fetchedAt) {
   return Date.now() - new Date(fetchedAt).getTime() > CACHE_TTL_MS;
 }
 
-async function saveCache(db, propertyId, platform, data) {
-  const existing = db
-    .prepare('SELECT id FROM analytics_cache WHERE property_id = ? AND platform = ?')
-    .get(propertyId, platform);
-
+async function saveCache(propertyId, platform, data) {
+  const existing = await get(
+    'SELECT id FROM propiq.analytics_cache WHERE property_id = $1 AND platform = $2',
+    [propertyId, platform]
+  );
   if (existing) {
-    db.prepare(`
-      UPDATE analytics_cache
-      SET fetched_at = datetime('now'), impressions = ?, likes = ?, comments = ?,
-          shares = ?, clicks = ?, reach = ?, extra_json = ?
-      WHERE property_id = ? AND platform = ?
-    `).run(
-      data.impressions || 0, data.likes || 0, data.comments || 0,
-      data.shares || 0, data.clicks || 0, data.reach || 0,
-      JSON.stringify(data), propertyId, platform
+    await run(
+      `UPDATE propiq.analytics_cache
+       SET fetched_at = now(), impressions = $1, likes = $2, comments = $3,
+           shares = $4, clicks = $5, reach = $6
+       WHERE property_id = $7 AND platform = $8`,
+      [data.impressions||0, data.likes||0, data.comments||0,
+       data.shares||0, data.clicks||0, data.reach||0, propertyId, platform]
     );
   } else {
-    db.prepare(`
-      INSERT INTO analytics_cache
-        (property_id, platform, impressions, likes, comments, shares, clicks, reach, extra_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      propertyId, platform,
-      data.impressions || 0, data.likes || 0, data.comments || 0,
-      data.shares || 0, data.clicks || 0, data.reach || 0,
-      JSON.stringify(data)
+    await run(
+      `INSERT INTO propiq.analytics_cache
+         (property_id, platform, impressions, likes, comments, shares, clicks, reach)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [propertyId, platform, data.impressions||0, data.likes||0, data.comments||0,
+       data.shares||0, data.clicks||0, data.reach||0]
     );
   }
-
-  // Insert a history snapshot every time fresh data is saved
-  db.prepare(`
-    INSERT INTO analytics_history
-      (property_id, platform, impressions, likes, comments, shares, clicks, reach)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    propertyId, platform,
-    data.impressions || 0, data.likes || 0, data.comments || 0,
-    data.shares || 0, data.clicks || 0, data.reach || 0
+  await run(
+    `INSERT INTO propiq.analytics_history
+       (property_id, platform, impressions, likes, comments, shares, clicks, reach)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [propertyId, platform, data.impressions||0, data.likes||0, data.comments||0,
+     data.shares||0, data.clicks||0, data.reach||0]
   );
 }
 
-async function fetchForLink(db, link) {
+async function fetchForLink(link) {
   const service = services[link.platform];
   if (!service) return { error: true, message: `Unknown platform: ${link.platform}`, data: null };
 
-  const cacheRow = db
-    .prepare('SELECT * FROM analytics_cache WHERE property_id = ? AND platform = ?')
-    .get(link.property_id, link.platform);
+  const cacheRow = await get(
+    'SELECT * FROM propiq.analytics_cache WHERE property_id = $1 AND platform = $2',
+    [link.property_id, link.platform]
+  );
 
   if (cacheRow && !isCacheStale(cacheRow.fetched_at)) {
     return {
@@ -80,7 +72,7 @@ async function fetchForLink(db, link) {
   const result = await service.fetchPostAnalytics(idOrPropertyId);
 
   if (!result.error && result.data) {
-    await saveCache(db, link.property_id, link.platform, result.data);
+    await saveCache(link.property_id, link.platform, result.data);
     result.stale = false;
   } else if (cacheRow) {
     result.stale = true;
@@ -99,15 +91,14 @@ async function fetchForLink(db, link) {
 router.get('/property/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const db = await getDb();
-    const property = db.prepare('SELECT * FROM properties WHERE id = ?').get(id);
+    const property = await get('SELECT * FROM propiq.properties WHERE id = $1', [id]);
     if (!property) return res.status(404).json({ success: false, error: 'Property not found' });
 
-    const links = db.prepare('SELECT * FROM platform_links WHERE property_id = ?').all(id);
+    const links = await all('SELECT * FROM propiq.platform_links WHERE property_id = $1', [id]);
     const byPlatform = {};
     for (const link of links) {
       if (!byPlatform[link.platform]) {
-        byPlatform[link.platform] = await fetchForLink(db, link);
+        byPlatform[link.platform] = await fetchForLink(link);
       }
     }
 
@@ -138,18 +129,17 @@ router.get('/property/:id', async (req, res) => {
 
 router.get('/overview', async (req, res) => {
   try {
-    const db = await getDb();
-    const properties = db.prepare('SELECT * FROM properties').all();
+    const properties = await all('SELECT * FROM propiq.properties');
     const platformTotals = { facebook: {}, instagram: {}, tiktok: {}, twitter: {}, buyrent: {} };
     const propertyStats = [];
 
     for (const property of properties) {
-      const links = db.prepare('SELECT * FROM platform_links WHERE property_id = ?').all(property.id);
+      const links = await all('SELECT * FROM propiq.platform_links WHERE property_id = $1', [property.id]);
       const byPlatform = {};
 
       for (const link of links) {
         if (!byPlatform[link.platform]) {
-          byPlatform[link.platform] = await fetchForLink(db, link);
+          byPlatform[link.platform] = await fetchForLink(link);
         }
       }
 
@@ -175,7 +165,6 @@ router.get('/overview', async (req, res) => {
           platformTotals[platform].clicks += d.clicks || 0;
         }
       }
-
       propertyStats.push({ property, totals });
     }
 
@@ -188,8 +177,7 @@ router.get('/overview', async (req, res) => {
 
 router.post('/refresh-all', async (req, res) => {
   try {
-    const db = await getDb();
-    const links = db.prepare('SELECT * FROM platform_links').all();
+    const links = await all('SELECT * FROM propiq.platform_links');
     const results = [];
     for (const link of links) {
       const service = services[link.platform];
@@ -197,7 +185,7 @@ router.post('/refresh-all', async (req, res) => {
       const idOrPropertyId = link.platform === 'buyrent' ? link.property_id : link.post_id;
       const result = await service.fetchPostAnalytics(idOrPropertyId);
       if (!result.error && result.data) {
-        await saveCache(db, link.property_id, link.platform, result.data);
+        await saveCache(link.property_id, link.platform, result.data);
       }
       results.push({ linkId: link.id, platform: link.platform, error: result.error });
     }
@@ -214,23 +202,24 @@ router.get('/platform/:platform', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid platform' });
   }
   try {
-    const db = await getDb();
-    const properties = db.prepare('SELECT * FROM properties').all();
+    const properties = await all('SELECT * FROM propiq.properties');
     const result = [];
 
     for (const property of properties) {
-      const link = db
-        .prepare('SELECT * FROM platform_links WHERE property_id = ? AND platform = ?')
-        .get(property.id, platform);
+      const link = await get(
+        'SELECT * FROM propiq.platform_links WHERE property_id = $1 AND platform = $2',
+        [property.id, platform]
+      );
 
       let latest = { impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0, reach: 0 };
       if (link) {
-        const fetched = await fetchForLink(db, link);
+        const fetched = await fetchForLink(link);
         if (fetched.data) latest = fetched.data;
       } else {
-        const cacheRow = db
-          .prepare('SELECT * FROM analytics_cache WHERE property_id = ? AND platform = ?')
-          .get(property.id, platform);
+        const cacheRow = await get(
+          'SELECT * FROM propiq.analytics_cache WHERE property_id = $1 AND platform = $2',
+          [property.id, platform]
+        );
         if (cacheRow) {
           latest = {
             impressions: cacheRow.impressions, likes: cacheRow.likes,
@@ -240,9 +229,10 @@ router.get('/platform/:platform', async (req, res) => {
         }
       }
 
-      const history = db
-        .prepare('SELECT recorded_at, impressions, likes, comments, shares, clicks, reach FROM analytics_history WHERE property_id = ? AND platform = ? ORDER BY recorded_at ASC')
-        .all(property.id, platform);
+      const history = await all(
+        'SELECT recorded_at, impressions, likes, comments, shares, clicks, reach FROM propiq.analytics_history WHERE property_id = $1 AND platform = $2 ORDER BY recorded_at ASC',
+        [property.id, platform]
+      );
 
       result.push({
         property: { id: property.id, name: property.name, address: property.address },
@@ -261,11 +251,10 @@ router.get('/platform/:platform', async (req, res) => {
       totals.reach += item.latest.reach || 0;
     }
 
-    // Aggregate history across all properties by date bucket
     const bucketMap = {};
     for (const item of result) {
       for (const h of item.history) {
-        const bucket = h.recorded_at.substring(0, 10);
+        const bucket = String(h.recorded_at).substring(0, 10);
         if (!bucketMap[bucket]) {
           bucketMap[bucket] = { recorded_at: bucket, impressions: 0, likes: 0, comments: 0, shares: 0, clicks: 0, reach: 0 };
         }
@@ -292,19 +281,17 @@ router.get('/platform/:platform/history', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid platform' });
   }
   try {
-    const db = await getDb();
-    const rows = db
-      .prepare(`
-        SELECT substr(recorded_at, 1, 10) as recorded_at,
-          SUM(impressions) as impressions, SUM(likes) as likes,
-          SUM(comments) as comments, SUM(shares) as shares,
-          SUM(clicks) as clicks, SUM(reach) as reach
-        FROM analytics_history
-        WHERE platform = ?
-        GROUP BY substr(recorded_at, 1, 10)
-        ORDER BY recorded_at ASC
-      `)
-      .all(platform);
+    const rows = await all(
+      `SELECT DATE(recorded_at) as recorded_at,
+         SUM(impressions) as impressions, SUM(likes) as likes,
+         SUM(comments) as comments, SUM(shares) as shares,
+         SUM(clicks) as clicks, SUM(reach) as reach
+       FROM propiq.analytics_history
+       WHERE platform = $1
+       GROUP BY DATE(recorded_at)
+       ORDER BY recorded_at ASC`,
+      [platform]
+    );
     res.json({ success: true, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
